@@ -7,74 +7,98 @@ import plotly.express as px
 model = joblib.load("rf_model.pkl")
 scaler = joblib.load("scaler.pkl")
 
-st.set_page_config(page_title="Fraud Detector", layout="centered")
-st.title("💳 Credit Card Fraud Detection App")
+st.set_page_config(page_title="Fraud Detector", layout="wide")
+st.title("💳 Credit Card Fraud Detection Dashboard")
 
-uploaded_file = st.file_uploader("📂 Upload CSV File", type=["csv"])
+uploaded_file = st.file_uploader("📂 Upload a CSV File", type=["csv"])
 if uploaded_file:
     data = pd.read_csv(uploaded_file)
+    file_details = {
+        "Filename": uploaded_file.name,
+        "Size (KB)": round(len(uploaded_file.getvalue()) / 1024, 2),
+        "Rows": len(data)
+    }
 
-    # Drop 'Class' column if it exists
+    st.sidebar.header("📁 File Info")
+    st.sidebar.write(file_details)
+
+    # Drop 'Class' column if exists
     if 'Class' in data.columns:
         data = data.drop(columns=['Class'])
 
-    # Scale 'Amount' column
     if 'Amount' in data.columns:
         data['Amount'] = scaler.transform(data[['Amount']])
 
-    # Make predictions
+    # Predict and get probabilities
     predictions = model.predict(data)
-    data['Prediction'] = predictions
+    probabilities = model.predict_proba(data)[:, 1]  # Prob of fraud class
 
-    # Summary info
+    data['Prediction'] = predictions
+    data['Fraud Probability'] = probabilities.round(3)
+
     fraud_data = data[data['Prediction'] == 1]
     normal_data = data[data['Prediction'] == 0]
+
     fraud_count = len(fraud_data)
-    total_count = len(data)
-    fraud_rate = round((fraud_count / total_count) * 100, 2)
+    total = len(data)
+    fraud_rate = round((fraud_count / total) * 100, 2)
 
-    # Output summary
-    st.subheader("🔍 Prediction Summary")
-    st.success(f"✅ Total Transactions: {total_count}")
-    st.warning(f"⚠️ Fraudulent Transactions Detected: {fraud_count}")
-    st.info(f"📊 Fraud Rate: {fraud_rate}%")
+    # Sidebar metrics
+    st.sidebar.header("📊 Fraud Stats")
+    st.sidebar.metric("Total Transactions", total)
+    st.sidebar.metric("Fraudulent", fraud_count)
+    st.sidebar.metric("Fraud Rate (%)", fraud_rate)
 
-    st.subheader("📋 Preview of Results")
-    st.dataframe(data.head())
+    # Main summary
+    st.subheader("📋 Prediction Summary")
+    st.success(f"✅ Total Transactions: {total}")
+    st.warning(f"⚠️ Fraudulent Transactions: {fraud_count}")
+    st.info(f"📈 Fraud Rate: {fraud_rate}%")
 
-    # Pie chart
-    st.subheader("📈 Fraud vs Non-Fraud Pie Chart")
-    pie_fig = px.pie(data, names='Prediction', title="Fraud Detection Breakdown",
-                     color_discrete_map={0: 'green', 1: 'red'},
-                     hole=0.4)
-    st.plotly_chart(pie_fig)
+    # Filter toggle
+    st.subheader("🔍 View Transactions")
+    view_option = st.radio("Select what to view:", ["All", "Only Fraud", "Only Non-Fraud"])
+    if view_option == "Only Fraud":
+        st.dataframe(fraud_data)
+    elif view_option == "Only Non-Fraud":
+        st.dataframe(normal_data)
+    else:
+        st.dataframe(data.style.applymap(
+            lambda val: 'background-color: #FFCCCC' if val == 1 else '',
+            subset=['Prediction']
+        ))
 
-    # Bar chart
-      st.subheader("📊 Count of Transactions by Type")
+    # Charts
+    st.subheader("📈 Fraud Breakdown")
+    fig_pie = px.pie(
+        names=['Non-Fraud', 'Fraud'],
+        values=[len(normal_data), len(fraud_data)],
+        title="Fraud vs Non-Fraud",
+        color_discrete_map={'Non-Fraud': 'green', 'Fraud': 'red'},
+        hole=0.4
+    )
+    st.plotly_chart(fig_pie)
 
-    # Create a new DataFrame for plotting
-    counts = data['Prediction'].value_counts().sort_index()
+    st.subheader("📊 Transaction Counts")
     count_df = pd.DataFrame({
         'Class': ['Non-Fraud', 'Fraud'],
-        'Count': [counts.get(0, 0), counts.get(1, 0)]
+        'Count': [len(normal_data), len(fraud_data)]
     })
-
-    bar_fig = px.bar(
+    fig_bar = px.bar(
         count_df,
         x='Class',
         y='Count',
         color='Class',
         color_discrete_map={'Non-Fraud': 'green', 'Fraud': 'red'},
-        title="Number of Fraud vs Non-Fraud Transactions"
+        title="Transaction Type Counts"
     )
-    st.plotly_chart(bar_fig)
+    st.plotly_chart(fig_bar)
 
-
-    # Download results
-    st.subheader("⬇️ Download Prediction Results")
+    # Download button
+    st.subheader("⬇️ Download Results")
     st.download_button(
-        label="Download as CSV",
+        "Download as CSV",
         data=data.to_csv(index=False).encode('utf-8'),
-        file_name="fraud_predictions.csv",
+        file_name="fraud_detection_results.csv",
         mime="text/csv"
     )
