@@ -50,15 +50,25 @@ if uploaded_file:
     st.plotly_chart(pie_fig)
 
     # Bar chart
-    st.subheader("📊 Count of Transactions by Type")
+      st.subheader("📊 Count of Transactions by Type")
+
+    # Create a new DataFrame for plotting
+    counts = data['Prediction'].value_counts().sort_index()
+    count_df = pd.DataFrame({
+        'Class': ['Non-Fraud', 'Fraud'],
+        'Count': [counts.get(0, 0), counts.get(1, 0)]
+    })
+
     bar_fig = px.bar(
-        data['Prediction'].value_counts().reset_index().rename(columns={'index': 'Class', 'Prediction': 'Count'}),
-        x='Class', y='Count',
+        count_df,
+        x='Class',
+        y='Count',
         color='Class',
-        color_discrete_map={0: 'green', 1: 'red'},
+        color_discrete_map={'Non-Fraud': 'green', 'Fraud': 'red'},
         title="Number of Fraud vs Non-Fraud Transactions"
     )
     st.plotly_chart(bar_fig)
+
 
     # Download results
     st.subheader("⬇️ Download Prediction Results")
